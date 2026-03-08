@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows 12 Pro - Ultimate Max</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@200;300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --glass: rgba(255, 255, 255, 0.4);
+            --glass-heavy: rgba(255, 255, 255, 0.85);
+            --accent: #0078d4;
+            --shadow: 0 15px 35px rgba(0,0,0,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', 'Kanit', sans-serif; }
+
+        body {
+            background: url('https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=2070') no-repeat center center fixed;
+            background-size: cover; height: 100vh; overflow: hidden; user-select: none;
+        }
+
+        /* --- Boot Screen --- */
+        #boot-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 100000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; color: white; transition: 1s ease;
+        }
+        .boot-logo { font-size: 80px; margin-bottom: 20px; animation: pulse 2s infinite; }
+        .boot-btn {
+            padding: 15px 40px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.4);
+            color: white; border-radius: 50px; cursor: pointer; font-size: 1.1rem; backdrop-filter: blur(10px);
+            transition: 0.3s;
+        }
+        .boot-btn:hover { background: rgba(255,255,255,0.25); transform: scale(1.05); }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+        /* --- Desktop --- */
+        #desktop {
+            width: 100%; height: calc(100% - 60px); padding: 25px;
+            display: grid; grid-template-columns: repeat(auto-fill, 100px);
+            grid-template-rows: repeat(auto-fill, 115px); grid-auto-flow: column; gap: 15px;
+            opacity: 0; transition: 1.5s ease;
+        }
+
+        .desktop-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.6); cursor: pointer;
+            border-radius: 10px; border: 1px solid transparent; transition: 0.1s;
+        }
+        .desktop-item:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.2); }
+        .desktop-item .icon { font-size: 45px; margin-bottom: 5px; }
+        .desktop-item span { font-size: 0.75rem; text-align: center; font-weight: 300; }
+
+        /* --- Window System (Updated for Auto-Max) --- */
+        .window {
+            position: absolute; width: 850px; height: 550px; 
+            top: 50px; left: 100px;
+            background: var(--glass-heavy); backdrop-filter: blur(30px); 
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: var(--shadow); display: none; flex-direction: column; z-index: 100;
+            overflow: hidden; transition: all 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+        }
+
+        .window.maximized {
+            width: 100% !important; height: calc(100% - 60px) !important;
+            top: 0 !important; left: 0 !important; border-radius: 0;
+        }
+
+        .win-header {
+            padding: 12px 18px; background: rgba(0,0,0,0.03);
+            display: flex; justify-content: space-between; align-items: center; cursor: move;
+        }
+
+        .win-controls { display: flex; gap: 10px; }
+        .win-dot { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
+        .win-dot.close { background: #ff5f57; }
+        .win-dot.max { background: #febc2e; } /* Restore/Max toggle */
+        .win-dot.min { background: #28c840; } 
+
+        iframe { flex: 1; border: none; background: white; }
+
+        /* --- Context Menu --- */
+        #ctx-menu {
+            position: fixed; background: var(--glass-heavy); backdrop-filter: blur(20px);
+            border-radius: 12px; width: 220px; display: none; flex-direction: column;
+            padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); z-index: 99999;
+        }
+        .ctx-item {
+            padding: 10px 15px; font-size: 0.85rem; cursor: pointer; border-radius: 8px;
+            display: flex; justify-content: space-between; align-items: center; color: #333;
+        }
+        .ctx-item:hover { background: var(--accent); color: white; }
+        .ctx-sep { height: 1px; background: rgba(0,0,0,0.1); margin: 6px 0; }
+
+        /* --- Taskbar --- */
+        .taskbar {
+            position: fixed; bottom: 0; width: 100%; height: 60px;
+            background: rgba(255,255,255,0.25); backdrop-filter: blur(25px);
+            display: flex; justify-content: center; align-items: center;
+            padding: 0 20px; z-index: 10000; border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        .task-center { display: flex; gap: 10px; }
+        .task-btn {
+            width: 45px; height: 45px; background: white; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            font-size: 24px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .task-btn:hover { transform: translateY(-10px); }
+
+        /* --- Toast Notification --- */
+        #toast {
+            position: fixed; bottom: 80px; right: -320px; width: 300px;
+            background: var(--glass-heavy); backdrop-filter: blur(15px);
+            padding: 15px; border-radius: 12px; border-left: 5px solid var(--accent);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15); transition: 0.5s ease; z-index: 100001;
+        }
+
+        .sys-tray { position: absolute; right: 25px; color: white; text-align: right; font-size: 0.8rem; }
+    </style>
+</head>
+<body oncontextmenu="return handleGlobalCtx(event)">
+
+    <div id="boot-screen">
+        <div class="boot-logo">💠</div>
+        <button class="boot-btn" onclick="bootOS()">Boot Windows 12</button>
+        <p style="margin-top: 20px; font-weight: 200; opacity: 0.5;">Optimized for Fullscreen</p>
+    </div>
+
+    <div id="desktop" onclick="hideMenus()"></div>
+
+    <div id="main-window" class="window" onclick="bringToFront()">
+        <div class="win-header" onmousedown="startDrag(event)" ondblclick="toggleMaximize()">
+            <span id="win-title">Explorer</span>
+            <div class="win-controls">
+                <div class="win-dot min" onclick="showToast('Info', 'System Minimize feature coming soon')"></div>
+                <div class="win-dot max" onclick="toggleMaximize()"></div>
+                <div class="win-dot close" onclick="closeApp()"></div>
+            </div>
+        </div>
+        <iframe id="win-iframe" src=""></iframe>
+    </div>
+
+    <div id="ctx-menu">
+        <div id="ctx-desktop">
+            <div class="ctx-item" onclick="crud('add')">➕ New Shortcut</div>
+            <div class="ctx-item" onclick="location.reload()">🔄 Refresh</div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" onclick="toggleFull()">🖥️ Fullscreen Toggle</div>
+        </div>
+        <div id="ctx-item" style="display:none">
+            <div class="ctx-item" onclick="crud('edit')">✏️ Edit Properties</div>
+            <div class="ctx-item" onclick="crud('delete')" style="color: #d33;">🗑️ Remove Item</div>
+        </div>
+    </div>
+
+    <div class="taskbar">
+        <div class="task-center">
+            <div class="task-btn" onclick="showToast('Menu', 'Start Menu Updated')">💠</div>
+            <div class="task-btn" onclick="location.reload()">🏠</div>
+        </div>
+        <div id="toast">
+            <strong id="toast-title">System</strong>
+            <p id="toast-msg" style="font-size: 0.8rem; margin-top: 5px;"></p>
+        </div>
+        <div class="sys-tray">
+            <div id="clock" style="font-weight: 500;">00:00</div>
+            <div id="date" style="font-size: 0.65rem; opacity: 0.8;">01/01/2026</div>
+        </div>
+    </div>
+
+    <script>
+        // --- Supabase Config ---
+        const SB_URL = 'https://lvbrkqxutvtbjiacovgu.supabase.co';
+        const SB_KEY = 'sb_publishable_N4WVDMv2H3a1iwM5IrJseA_TOdb6M5b';
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+
+        let selectedIconId = null;
+        let highestZ = 1000;
+
+        // --- Core OS Functions ---
+        function bootOS() {
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) doc.requestFullscreen();
+            
+            document.getElementById('boot-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('boot-screen').style.display = 'none';
+                document.getElementById('desktop').style.opacity = '1';
+                loadIcons();
+                showToast("Windows 12", "Welcome to the Ultimate Experience.");
+            }, 1000);
+        }
+
+        function toggleFull() {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+            hideMenus();
+        }
+
+        // --- Window Management (Maximized by Default) ---
+        function openApp(title, url) {
+            const win = document.getElementById('main-window');
+            document.getElementById('win-title').innerText = title;
+            document.getElementById('win-iframe').src = url;
+            
+            win.style.display = 'flex';
+            win.classList.add('maximized'); // เปิดแล้วเต็มจอทันที
+            bringToFront();
+        }
+
+        function closeApp() {
+            document.getElementById('main-window').style.display = 'none';
+            document.getElementById('win-iframe').src = '';
+        }
+
+        function toggleMaximize() {
+            document.getElementById('main-window').classList.toggle('maximized');
+        }
+
+        function bringToFront() {
+            highestZ++;
+            document.getElementById('main-window').style.zIndex = highestZ;
+        }
+
+        function startDrag(e) {
+            const win = document.getElementById('main-window');
+            if (win.classList.contains('maximized')) return; // เต็มจออยู่ ห้ามลาก
+            
+            let ox = e.clientX - win.offsetLeft;
+            let oy = e.clientY - win.offsetTop;
+            document.onmousemove = (e) => {
+                win.style.left = e.pageX - ox + 'px';
+                win.style.top = e.pageY - oy + 'px';
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        }
+
+        // --- Supabase CRUD ---
+        async function loadIcons() {
+            const { data, error } = await _supabase.from('desktop_icons').select('*').order('created_at', { ascending: true });
+            if (!error) renderIcons(data);
+        }
+
+        function renderIcons(icons) {
+            const desk = document.getElementById('desktop');
+            desk.innerHTML = '';
+            icons.forEach(icon => {
+                const div = document.createElement('div');
+                div.className = 'desktop-item';
+                div.innerHTML = `<div class="icon">${icon.icon}</div><span>${icon.name}</span>`;
+                div.ondblclick = () => openApp(icon.name, icon.url);
+                div.oncontextmenu = (e) => {
+                    e.stopPropagation();
+                    selectedIconId = icon.id;
+                    showCtxMenu(e, true);
+                    return false;
+                };
+                desk.appendChild(div);
+            });
+        }
+
+        async function crud(type) {
+            hideMenus();
+            if (type === 'add') {
+                const name = prompt("Shortcut Name:");
+                const url = prompt("Target URL (https://...):");
+                const icon = prompt("Emoji Icon:", "🌐");
+                if (name && url) {
+                    await _supabase.from('desktop_icons').insert([{ name, url, icon }]);
+                    showToast("Success", "New shortcut added.");
+                }
+            } else if (type === 'edit') {
+                const { data } = await _supabase.from('desktop_icons').select('*').eq('id', selectedIconId).single();
+                const newName = prompt("New Name:", data.name);
+                const newUrl = prompt("New URL:", data.url);
+                if (newName && newUrl) {
+                    await _supabase.from('desktop_icons').update({ name: newName, url: newUrl }).eq('id', selectedIconId);
+                    showToast("Success", "Icon properties updated.");
+                }
+            } else if (type === 'delete') {
+                if (confirm("Delete this icon permanently?")) {
+                    await _supabase.from('desktop_icons').delete().eq('id', selectedIconId);
+                    showToast("Deleted", "Icon removed from database.");
+                }
+            }
+            loadIcons();
+        }
+
+        // --- UI Utilities ---
+        function handleGlobalCtx(e) {
+            e.preventDefault();
+            selectedIconId = null;
+            showCtxMenu(e, false);
+            return false;
+        }
+
+        function showCtxMenu(e, isItem) {
+            const menu = document.getElementById('ctx-menu');
+            menu.style.display = 'flex';
+            menu.style.top = e.pageY + 'px';
+            menu.style.left = e.pageX + 'px';
+            document.getElementById('ctx-desktop').style.display = isItem ? 'none' : 'block';
+            document.getElementById('ctx-item').style.display = isItem ? 'block' : 'none';
+        }
+
+        function hideMenus() { document.getElementById('ctx-menu').style.display = 'none'; }
+
+        function showToast(title, msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-msg').innerText = msg;
+            toast.style.right = '20px';
+            setTimeout(() => { toast.style.right = '-320px'; }, 3500);
+        }
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+            document.getElementById('date').innerText = now.toLocaleDateString('th-TH');
+        }
+
+        setInterval(updateTime, 1000);
+        updateTime();
+    </script>
+</body>
+</html>
